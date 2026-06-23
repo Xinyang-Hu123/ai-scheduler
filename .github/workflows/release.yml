@@ -9,37 +9,67 @@ permissions:
   contents: write
 
 jobs:
-
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
-            artifact: dist/ai-scheduler.exe
+            asset_name: ai-scheduler-windows-x64.exe
           - os: macos-latest
-            artifact: dist/ai-scheduler
+            asset_name: ai-scheduler-macos-arm64
+          - os: macos-13
+            asset_name: ai-scheduler-macos-x64
           - os: ubuntu-latest
-            artifact: dist/ai-scheduler
+            asset_name: ai-scheduler-linux-x64
 
     runs-on: ${{ matrix.os }}
 
     steps:
-
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install project
-        run: pip install .
-
-      - name: Install PyInstaller
-        run: pip install pyinstaller
+      - name: Install dependencies
+        run: pip install . pyinstaller
 
       - name: Build binary
-        run: pyinstaller --onefile --name ai-scheduler --collect-submodules typer --collect-submodules rich main.py
+        run: >
+          pyinstaller --onefile --name ai-scheduler
+          --collect-submodules typer
+          --collect-submodules rich
+          --collect-submodules adapters
+          --collect-submodules commands
+          --hidden-import scheduler
+          main.py
+
+      - name: Rename for upload
+        shell: bash
+        run: |
+          if [ -f dist/ai-scheduler.exe ]; then
+            mv dist/ai-scheduler.exe dist/${{ matrix.asset_name }}
+          else
+            mv dist/ai-scheduler dist/${{ matrix.asset_name }}
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: dist/${{ matrix.asset_name }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
 
       - uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.artifact }}
+          generate_release_notes: true
+          files: artifacts/*

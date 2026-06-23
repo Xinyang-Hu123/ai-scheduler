@@ -14,8 +14,16 @@ console = Console()
 
 app = typer.Typer(help="调度器 daemon 管理", no_args_is_help=True)
 
-# scheduler.py 的绝对路径
-_SCHEDULER_SCRIPT = str(Path(__file__).resolve().parent.parent / "scheduler.py")
+def _get_scheduler_command() -> list[str]:
+    """返回启动 scheduler 的命令行。
+
+    PyInstaller 打包后通过自身 --internal-scheduler 入口启动；
+    开发环境下直接运行 scheduler.py。
+    """
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--internal-scheduler"]
+    script = str(Path(__file__).resolve().parent.parent / "scheduler.py")
+    return [sys.executable, script]
 
 
 def _read_pid() -> int | None:
@@ -48,7 +56,7 @@ def _is_running(pid: int) -> bool:
 
 
 def _is_our_scheduler(pid: int) -> bool:
-    """检查 pid 进程的命令行是否包含 scheduler.py。"""
+    """检查 pid 进程的命令行是否包含 scheduler.py 或 --internal-scheduler。"""
     try:
         if sys.platform == "win32":
             out = subprocess.run(
@@ -58,13 +66,13 @@ def _is_our_scheduler(pid: int) -> bool:
                 ],
                 capture_output=True, text=True, timeout=5,
             )
-            return "scheduler.py" in out.stdout
+            return "scheduler.py" in out.stdout or "--internal-scheduler" in out.stdout
         else:
             out = subprocess.run(
                 ["ps", "-p", str(pid), "-o", "command="],
                 capture_output=True, text=True, timeout=5,
             )
-            return "scheduler.py" in out.stdout
+            return "scheduler.py" in out.stdout or "--internal-scheduler" in out.stdout
     except (subprocess.SubprocessError, OSError):
         # ps 不可用时仅凭 pid 存活判断（降级）
         return True
@@ -82,12 +90,13 @@ def start() -> None:
 
     ensure_dirs()
 
+    cmd = _get_scheduler_command()
+
     if sys.platform == "win32":
         # Windows: 用 DETACHED_PROCESS 后台启动
-        # TODO: 验证 Windows 下的日志重定向
         flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
         proc = subprocess.Popen(
-            [sys.executable, _SCHEDULER_SCRIPT],
+            cmd,
             stdout=open(LOG_FILE, "a"),
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
@@ -96,7 +105,7 @@ def start() -> None:
     else:
         # Mac/Linux: 用 nohup 后台启动
         proc = subprocess.Popen(
-            [sys.executable, _SCHEDULER_SCRIPT],
+            cmd,
             stdout=open(LOG_FILE, "a"),
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,

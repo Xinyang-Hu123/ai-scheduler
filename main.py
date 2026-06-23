@@ -1,4 +1,6 @@
 """ai-scheduler CLI 入口。"""
+import sys
+
 import typer
 from rich.console import Console
 
@@ -47,4 +49,11 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    app()
+    if len(sys.argv) >= 2 and sys.argv[1] == "--internal-scheduler":
+        # PyInstaller 打包后 daemon 启动的内部入口
+        from scheduler import run_loop
+
+        ensure_dirs()
+        run_loop()
+    else:
+        app()
