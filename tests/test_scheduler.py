@@ -1,5 +1,4 @@
 """scheduler 单元测试：run_once 到期执行、跳过未来、失败处理、结果落盘。"""
-from datetime import datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -41,7 +40,7 @@ def mock_get_adapter():
 
 class TestRunOnce:
     def test_executes_due_task(self):
-        task = store.add_task("2020-01-01 00:00", "claude", "hello")
+        store.add_task("2020-01-01 00:00", "claude", "hello")
         n = scheduler.run_once()
         assert n == 1
 
@@ -99,7 +98,7 @@ class TestResultFile:
 class TestFailureHandling:
     def test_failed_task_records_error(self):
         _MockAdapter.fail_on = "explode"
-        task = store.add_task("2020-01-01 00:00", "claude", "explode me")
+        store.add_task("2020-01-01 00:00", "claude", "explode me")
         scheduler.run_once()
 
         tasks = store.load_tasks()
@@ -112,7 +111,7 @@ class TestFailureHandling:
 
         with patch.object(scheduler, "get_adapter") as m:
             m.return_value.run = boom
-            task = store.add_task("2020-01-01 00:00", "claude", "q")
+            store.add_task("2020-01-01 00:00", "claude", "q")
             scheduler.run_once()
 
         tasks = store.load_tasks()
@@ -122,7 +121,7 @@ class TestFailureHandling:
 
 class TestInvalidScheduledAt:
     def test_bad_time_format_marked_failed(self):
-        task = store.add_task("not-a-date", "claude", "q")
+        store.add_task("not-a-date", "claude", "q")
         scheduler.run_once()
 
         tasks = store.load_tasks()
@@ -132,7 +131,7 @@ class TestInvalidScheduledAt:
 
 class TestFileContext:
     def test_file_path_appended_to_question(self):
-        task = store.add_task(
+        store.add_task(
             "2020-01-01 00:00", "claude", "explain this", file="/tmp/x.py"
         )
         scheduler.run_once()

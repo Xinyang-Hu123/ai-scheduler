@@ -1,7 +1,6 @@
 """add 命令：新增定时任务。"""
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -53,10 +52,10 @@ def add_command(
     platform: str = typer.Option(
         "claude", "--platform", "-p", help=f"AI 平台: {AVAILABLE_PLATFORMS}"
     ),
-    question: Optional[str] = typer.Option(
+    question: str | None = typer.Option(
         None, "--question", "-q", help="提问内容"
     ),
-    file: Optional[Path] = typer.Option(
+    file: Path | None = typer.Option(
         None, "--file", "-f", help="从文件读取问题内容"
     ),
 ) -> None:

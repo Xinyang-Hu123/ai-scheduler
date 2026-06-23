@@ -10,7 +10,7 @@ import os
 import sys
 import uuid
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from config import DATA_FILE, ensure_dirs
 
@@ -73,7 +73,7 @@ def _read_raw() -> list[dict[str, Any]]:
     if not DATA_FILE.exists():
         return []
     try:
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
+        with open(DATA_FILE, encoding="utf-8") as f:
             data = json.load(f)
         return data if isinstance(data, list) else []
     except json.JSONDecodeError:
@@ -121,7 +121,7 @@ def add_task(
     scheduled_at: str,
     platform: str,
     question: str,
-    file: Optional[str] = None,
+    file: str | None = None,
 ) -> dict[str, Any]:
     """新增一条任务并保存，返回新建的任务字典。"""
     with _lock():
@@ -143,11 +143,11 @@ def add_task(
     return task
 
 
-def update_task(task_id: str, **fields: Any) -> Optional[dict[str, Any]]:
+def update_task(task_id: str, **fields: Any) -> dict[str, Any] | None:
     """按 id 更新指定字段，返回更新后的任务（未找到返回 None）。"""
     with _lock():
         tasks = _read_raw()
-        updated: Optional[dict[str, Any]] = None
+        updated: dict[str, Any] | None = None
         for task in tasks:
             if task["id"] == task_id:
                 task.update(fields)
@@ -170,7 +170,7 @@ def remove_task(task_id: str) -> bool:
     return True
 
 
-def get_task(task_id: str) -> Optional[dict[str, Any]]:
+def get_task(task_id: str) -> dict[str, Any] | None:
     """按 id 查询单条任务。"""
     for task in load_tasks():
         if task["id"] == task_id:

@@ -1,6 +1,5 @@
 """add.py 单元测试：时间解析、过期顺延、参数校验。"""
 from datetime import datetime, timedelta
-from unittest.mock import patch
 
 import pytest
 import typer

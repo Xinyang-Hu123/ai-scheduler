@@ -1,8 +1,6 @@
 """store.py 单元测试：CRUD、原子写入、并发锁、损坏恢复。"""
 import json
 
-import pytest
-
 import store
 
 
@@ -52,7 +50,7 @@ class TestAtomicWrite:
 
     def test_json_is_valid(self):
         store.add_task("2026-06-24 10:00", "claude", "q")
-        with open(store.DATA_FILE, "r", encoding="utf-8") as f:
+        with open(store.DATA_FILE, encoding="utf-8") as f:
             data = json.load(f)
         assert isinstance(data, list)
         assert data[0]["question"] == "q"

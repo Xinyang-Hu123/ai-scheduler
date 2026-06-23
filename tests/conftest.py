@@ -15,8 +15,8 @@ def isolated_data_dir(tmp_path, monkeypatch):
     lock_file = base / "tasks.lock"
 
     import config
-    import store
     import scheduler
+    import store
 
     # 补丁 config 模块常量
     monkeypatch.setattr(config, "BASE_DIR", base)
