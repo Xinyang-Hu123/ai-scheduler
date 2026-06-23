@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: dist/ai-scheduler.exe
+          - os: macos-latest
+            artifact: dist/ai-scheduler
+          - os: ubuntu-latest
+            artifact: dist/ai-scheduler
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install project
+        run: pip install .
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build binary
+        run: pyinstaller --onefile --name ai-scheduler --collect-submodules typer --collect-submodules rich main.py
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.artifact }}
