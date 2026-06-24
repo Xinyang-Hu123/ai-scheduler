@@ -17,7 +17,7 @@ jobs:
           - os: windows-latest
             asset_name: ai-scheduler-windows-x64.exe
           - os: macos-latest
-            asset_name: ai-scheduler-macos-arm64
+            asset_name: ai-scheduler-macos
           - os: ubuntu-latest
             asset_name: ai-scheduler-linux-x64
 

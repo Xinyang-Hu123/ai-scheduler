@@ -32,7 +32,11 @@ class TestParseScheduledAt:
     def test_time_only_past_rolls_to_tomorrow(self):
         """只给时间且已过 -> 顺延明天。"""
         now = datetime.now()
-        past = (now - timedelta(hours=3)).strftime("%H:%M")
+        past_dt = now - timedelta(hours=3)
+        # 跨午夜时改用今天凌晨，确保时间确实已过
+        if past_dt.date() != now.date():
+            past_dt = now.replace(hour=0, minute=5, second=0, microsecond=0)
+        past = past_dt.strftime("%H:%M")
         result = parse_scheduled_at(past)
         parsed = datetime.fromisoformat(result)
         assert parsed.date() == (now + timedelta(days=1)).date()
