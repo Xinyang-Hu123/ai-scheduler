@@ -1,4 +1,6 @@
-# ai-scheduler
+# 定时自动调用 `claude` / `codex` 命令行工具提问的 CLI 工具。
+
+# codex的适配可能会出现未知的问题 介意勿用
 
 定时自动调用 `claude` / `codex` 命令行工具提问的 CLI 工具。
 
