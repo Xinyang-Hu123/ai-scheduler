@@ -1,4 +1,7 @@
-# ai-scheduler
+# 定时自动调用 `claude` / `codex` 命令行工具提问的 CLI 工具。
+
+# 注意 ： 目前codex的适配可能还有问题，介意勿用
+
 
 定时自动调用 `claude` / `codex` 命令行工具提问的 CLI 工具。
 
@@ -6,7 +9,7 @@
 
 ## 功能
 
-- `add` — 新增定时提问任务（支持 `--at` 时间 / `--platform` 平台 / `--question` 或 `--file` 问题来源）
+- `add` — 新增定时提问任务（`--at` 时间 / `--platform` 平台 / `--question` 问题文本 / `--file` 附加文件，二者可单用或组合）
 - `list` — 列出全部任务（rich 表格，支持 `--status` 过滤）
 - `remove` — 按 ID 删除任务
 - `daemon` — 后台启动 / 停止 / 查看调度器状态
@@ -28,8 +31,11 @@ pip install .
 # 新增任务：今天 23:30 用 claude 提问
 ai-scheduler add --at "23:30" -p claude -q "总结今天的科技新闻"
 
-# 指定日期 + 从文件读取问题
+# 指定日期 + 用文件内容作为提问（文件内容在执行时读取）
 ai-scheduler add --at "2026-06-24 09:00" -p codex -f prompt.txt
+
+# 问题 + 附加文件上下文（问题在前，文件内容附在后面）
+ai-scheduler add --at "09:00" -p claude -q "审查这段代码" -f main.py
 
 # 启动后台调度器（到点自动执行）
 ai-scheduler daemon start

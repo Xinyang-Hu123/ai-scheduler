@@ -3,6 +3,7 @@ import os
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import typer
@@ -92,31 +93,59 @@ def start() -> None:
 
     cmd = _get_scheduler_command()
 
-    if sys.platform == "win32":
-        # Windows: 用 DETACHED_PROCESS 后台启动
-        flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-        proc = subprocess.Popen(
-            cmd,
-            stdout=open(LOG_FILE, "a"),
-            stderr=subprocess.STDOUT,
-            stdin=subprocess.DEVNULL,
-            creationflags=flags,
-        )
-    else:
-        # Mac/Linux: 用 nohup 后台启动
-        proc = subprocess.Popen(
-            cmd,
-            stdout=open(LOG_FILE, "a"),
-            stderr=subprocess.STDOUT,
-            stdin=subprocess.DEVNULL,
-            start_new_session=True,
-        )
+    # 子进程会 dup 一份 fd，父进程持有的副本在 Popen 后即可关闭，避免句柄泄漏
+    log_fh = open(LOG_FILE, "a")
+    try:
+        if sys.platform == "win32":
+            # Windows: 用 DETACHED_PROCESS 后台启动
+            flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+            proc = subprocess.Popen(
+                cmd,
+                stdout=log_fh,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                creationflags=flags,
+            )
+        else:
+            # Mac/Linux: 新建会话脱离终端后台启动
+            proc = subprocess.Popen(
+                cmd,
+                stdout=log_fh,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+    finally:
+        log_fh.close()
 
     _write_pid(proc.pid)
     console.print(
         f"[bold green]✓[/bold green] daemon 已启动 (pid={proc.pid})\n"
         f"  日志: {LOG_FILE}"
     )
+
+
+def _terminate_unix(pid: int, timeout: float = 5.0) -> None:
+    """先 SIGTERM 优雅退出；超时仍存活则 SIGKILL 强制结束。"""
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+
+    # 轮询等待进程退出
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return  # 已优雅退出
+        time.sleep(0.1)
+
+    # 仍未退出 -> 强杀兜底
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
 
 
 @app.command()
@@ -132,18 +161,15 @@ def stop() -> None:
         _clear_pid()
         return
 
-    try:
-        if sys.platform == "win32":
-            # Windows: taskkill 强制终止进程树
-            subprocess.run(
-                ["taskkill", "/PID", str(pid), "/F", "/T"],
-                capture_output=True,
-            )
-        else:
-            # 先 SIGTERM，优雅退出
-            os.kill(pid, signal.SIGTERM)
-    except ProcessLookupError:
-        pass
+    if sys.platform == "win32":
+        # Windows: taskkill 强制终止进程树
+        subprocess.run(
+            ["taskkill", "/PID", str(pid), "/F", "/T"],
+            capture_output=True,
+        )
+    else:
+        # 先 SIGTERM 优雅退出，超时再 SIGKILL
+        _terminate_unix(pid)
 
     _clear_pid()
     console.print(f"[bold green]✓[/bold green] daemon 已停止 (pid={pid})")

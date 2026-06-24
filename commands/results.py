@@ -1,4 +1,5 @@
 """results 命令：查看已完成任务的结果。"""
+import re
 from pathlib import Path
 
 import typer
@@ -12,10 +13,39 @@ from store import get_task, load_tasks
 
 console = Console()
 
+# markdown 结构特征：命中任一即认为内容是 markdown
+_MD_PATTERNS = [
+    r"^#{1,6}\s",        # 标题 # ##
+    r"^\s*[-*+]\s",      # 无序列表
+    r"^\s*\d+\.\s",      # 有序列表
+    r"^>\s",             # 引用
+    r"^\|.+\|",          # 表格
+    r"```",              # 代码块
+    r"\*\*.+?\*\*",      # 加粗
+    r"\[.+?\]\(.+?\)",   # 链接
+]
+
+
+def _human_size(num: int) -> str:
+    """把字节数格式化为人类可读大小（B/KB/MB/GB）。"""
+    size = float(num)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{int(size)}{unit}" if unit == "B" else f"{size:.1f}{unit}"
+        size /= 1024
+    return f"{size:.1f}GB"  # 理论不可达，兜底
+
+
+def _looks_like_markdown(text: str) -> bool:
+    """启发式判断文本是否为 markdown，否则按纯文本输出避免误渲染。"""
+    return any(re.search(pat, text, re.MULTILINE) for pat in _MD_PATTERNS)
+
 
 def _list_done_tasks() -> list[dict]:
-    """返回所有已完成的任务。"""
-    return [t for t in load_tasks() if t["status"] == "done"]
+    """返回所有已完成的任务（按完成时间倒序，最近完成的在前）。"""
+    done = [t for t in load_tasks() if t["status"] == "done"]
+    done.sort(key=lambda t: t.get("updated_at", ""), reverse=True)
+    return done
 
 
 def results_command(
@@ -42,7 +72,11 @@ def results_command(
 
         for t in done:
             result_file = RESULTS_DIR / f"{t['id']}.txt"
-            size = f"{result_file.stat().st_size}B" if result_file.exists() else "-"
+            size = (
+                _human_size(result_file.stat().st_size)
+                if result_file.exists()
+                else "-"
+            )
             table.add_row(
                 t["id"],
                 t["platform"],
@@ -86,9 +120,8 @@ def results_command(
     )
     console.print(Panel(info, title=f"任务 {task_id}", border_style="blue"))
 
-    # 渲染结果内容
-    if raw:
+    # 渲染结果内容：--raw 强制纯文本；否则按内容是否像 markdown 决定渲染方式
+    if raw or not _looks_like_markdown(content):
         console.print(content)
     else:
-        # TODO: 检测内容是否为 markdown，否则用纯文本
         console.print(Markdown(content))

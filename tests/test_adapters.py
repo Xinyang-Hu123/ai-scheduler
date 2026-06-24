@@ -1,4 +1,6 @@
-"""adapters 单元测试：strip_ansi、check_binary、get_adapter 工厂。"""
+"""adapters 单元测试：strip_ansi、check_binary、run_cli、get_adapter 工厂。"""
+import sys
+
 import pytest
 
 from adapters import AVAILABLE_PLATFORMS, get_adapter
@@ -6,6 +8,7 @@ from adapters.base import (
     BaseAdapter,
     BinaryNotFoundError,
     check_binary,
+    run_cli,
     strip_ansi,
 )
 from adapters.claude_adapter import ClaudeAdapter
@@ -36,6 +39,59 @@ class TestStripAnsi:
         text = "\x1b[0m  hello  \x1b[0m"
         # strip_ansi 本身不去首尾空格，ClaudeAdapter.run 会 strip
         assert strip_ansi(text).strip() == "hello"
+
+
+class TestRunCli:
+    """用无害的 python 子进程验证 run_cli 的子进程处理逻辑（无需 claude/codex）。"""
+
+    def test_happy_path_returns_stdout(self):
+        out = run_cli("py", [sys.executable, "-c", "print('hello')"])
+        assert out == "hello"
+
+    def test_input_passed_via_stdin(self):
+        out = run_cli(
+            "py",
+            [sys.executable, "-c",
+             "import sys; sys.stdout.write(sys.stdin.read().upper())"],
+            input="abc",
+        )
+        assert out == "ABC"
+
+    def test_nonzero_exit_raises_with_stderr(self):
+        with pytest.raises(RuntimeError, match="退出码 3"):
+            run_cli(
+                "py",
+                [sys.executable, "-c",
+                 "import sys; sys.stderr.write('boom'); sys.exit(3)"],
+            )
+
+    def test_timeout_raises_clean_error(self):
+        with pytest.raises(RuntimeError, match="超时"):
+            run_cli(
+                "py",
+                [sys.executable, "-c", "import time; time.sleep(5)"],
+                timeout=1,
+            )
+
+    def test_missing_binary_raises(self):
+        with pytest.raises(BinaryNotFoundError):
+            run_cli("nope", ["this-binary-does-not-exist-xyz123"])
+
+    def test_strips_ansi_from_output(self):
+        out = run_cli(
+            "py",
+            [sys.executable, "-c", "print('\\x1b[31mred\\x1b[0m')"],
+        )
+        assert out == "red"
+
+    def test_no_input_does_not_block_on_stdin(self):
+        # 不传 input 时 stdin 接 DEVNULL，子进程读到 EOF 而非挂起
+        out = run_cli(
+            "py",
+            [sys.executable, "-c",
+             "import sys; print('empty' if sys.stdin.read() == '' else 'got')"],
+        )
+        assert out == "empty"
 
 
 class TestCheckBinary:

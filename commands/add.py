@@ -65,12 +65,12 @@ def add_command(
             f"不支持的平台 '{platform}'，可选: {AVAILABLE_PLATFORMS}"
         )
 
-    # 优先使用 --question，否则从 --file 读取
-    if question is None and file is not None:
-        if not file.exists():
-            raise typer.BadParameter(f"文件不存在: {file}")
-        question = file.read_text(encoding="utf-8").strip()
-    if not question:
+    # --file 仅记录路径，内容在执行时由调度器读取（拿到最新内容）；
+    # 可与 --question 组合，也可单独作为提问来源。
+    if file is not None and not file.exists():
+        raise typer.BadParameter(f"文件不存在: {file}")
+    question = (question or "").strip()
+    if not question and file is None:
         raise typer.BadParameter("必须提供 --question 或 --file")
 
     scheduled_at = parse_scheduled_at(at)
@@ -86,8 +86,13 @@ def add_command(
     console.print(f"  [cyan]ID[/cyan]       : {task['id']}")
     console.print(f"  [cyan]平台[/cyan]     : {task['platform']}")
     console.print(f"  [cyan]计划时间[/cyan] : {task['scheduled_at']}")
-    preview = question if len(question) <= 60 else question[:57] + "..."
+    preview_src = question or (f"[文件: {file.name}]" if file else "")
+    preview = preview_src if len(preview_src) <= 60 else preview_src[:57] + "..."
     console.print(f"  [cyan]问题[/cyan]     : {preview}")
+    if datetime.fromisoformat(scheduled_at) <= datetime.now():
+        console.print(
+            "  [yellow]注意[/yellow]     : 计划时间已过，将在下次轮询时立即执行"
+        )
     console.print()
     console.print(
         "[dim]提示: 运行 `ai-scheduler daemon start` 启动后台调度。[/dim]"

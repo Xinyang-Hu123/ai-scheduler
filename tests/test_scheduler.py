@@ -1,4 +1,5 @@
 """scheduler 单元测试：run_once 到期执行、跳过未来、失败处理、结果落盘。"""
+import signal
 from unittest.mock import patch
 
 import pytest
@@ -129,10 +130,61 @@ class TestInvalidScheduledAt:
         assert "格式非法" in tasks[0]["error"]
 
 
+@pytest.fixture
+def restore_signals():
+    """run_loop 会注册 SIGTERM/SIGINT 处理器，测试后恢复，避免影响 pytest。"""
+    old_term = signal.getsignal(signal.SIGTERM)
+    old_int = signal.getsignal(signal.SIGINT)
+    yield
+    signal.signal(signal.SIGTERM, old_term)
+    signal.signal(signal.SIGINT, old_int)
+
+
+class TestRunLoopShutdown:
+    def test_loop_exits_when_stop_requested(self, monkeypatch, capsys, restore_signals):
+        """收到停止信号后，循环在当前轮次结束即退出并记录日志。"""
+        calls = []
+
+        def fake_run_once():
+            calls.append(1)
+            scheduler._request_stop(None, None)  # 模拟信号置位
+            return 0
+
+        monkeypatch.setattr(scheduler, "run_once", fake_run_once)
+        scheduler.run_loop(interval=1)
+
+        assert len(calls) == 1  # 只跑了一轮就退出
+        assert "daemon 已停止" in capsys.readouterr().out
+
+
 class TestFileContext:
-    def test_file_path_appended_to_question(self):
+    def test_file_content_appended_to_question(self, tmp_path):
+        """--question + --file：问题在前，文件内容作为附加上下文。"""
+        ctx = tmp_path / "ctx.txt"
+        ctx.write_text("CONTEXT_BODY", encoding="utf-8")
         store.add_task(
-            "2020-01-01 00:00", "claude", "explain this", file="/tmp/x.py"
+            "2020-01-01 00:00", "claude", "explain this", file=str(ctx)
         )
         scheduler.run_once()
-        assert "/tmp/x.py" in _MockAdapter.calls[0]
+        prompt = _MockAdapter.calls[0]
+        assert "explain this" in prompt
+        assert "CONTEXT_BODY" in prompt  # 真正读取的是内容，而非路径
+
+    def test_file_only_uses_content_as_prompt(self, tmp_path):
+        """仅 --file（无 --question）：文件内容本身即提问。"""
+        ctx = tmp_path / "prompt.txt"
+        ctx.write_text("THE_WHOLE_PROMPT", encoding="utf-8")
+        store.add_task("2020-01-01 00:00", "claude", "", file=str(ctx))
+        scheduler.run_once()
+        assert _MockAdapter.calls[0] == "THE_WHOLE_PROMPT"
+
+    def test_missing_file_notes_path_and_still_runs(self):
+        """文件执行时不可读：附上提示但不让整条任务失败。"""
+        store.add_task(
+            "2020-01-01 00:00", "claude", "explain this", file="/tmp/nope.py"
+        )
+        scheduler.run_once()
+
+        tasks = store.load_tasks()
+        assert tasks[0]["status"] == "done"
+        assert "/tmp/nope.py" in _MockAdapter.calls[0]

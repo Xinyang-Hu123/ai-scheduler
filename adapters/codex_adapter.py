@@ -1,33 +1,29 @@
 """Codex CLI 适配器。"""
-import subprocess
-
-from adapters.base import BaseAdapter, check_binary, strip_ansi
-from config import DEFAULT_TIMEOUT
+from adapters.base import BaseAdapter, run_cli
 
 
 class CodexAdapter(BaseAdapter):
-    """通过 `codex` 命令行工具提问。"""
+    """通过 `codex` 命令行工具提问。
+
+    无人值守场景的关键 flag：
+        --ask-for-approval never  不暂停等待人工批准（否则 daemon 会一直挂到超时）
+        --skip-git-repo-check     不强制要求运行在 git 仓库内
+
+    沙箱保持默认的只读模式：本工具只是「提问取答案」，不需要改文件，
+    只读最安全。如需让 codex 真正动手改代码，再加 --sandbox workspace-write。
+    """
 
     name = "codex"
 
     def run(self, question: str) -> str:
-        """调用 `codex exec`，返回干净 stdout。超时 300s。"""
-        try:
-            result = subprocess.run(
-                [
-                    "codex",
-                    "exec",          # 非交互批处理模式
-                    question,
-                ],
-                capture_output=True,
-                text=True,
-                timeout=DEFAULT_TIMEOUT,
-            )
-        except FileNotFoundError as e:
-            check_binary("codex", e)
-
-        if result.returncode != 0:
-            stderr = strip_ansi(result.stderr.strip())
-            raise RuntimeError(f"codex 退出码 {result.returncode}: {stderr}")
-
-        return strip_ansi(result.stdout).strip()
+        """调用 `codex exec`（非交互批处理模式），返回最终回答。"""
+        return run_cli(
+            "codex",
+            [
+                "codex",
+                "exec",
+                "--ask-for-approval", "never",
+                "--skip-git-repo-check",
+                question,
+            ],
+        )
