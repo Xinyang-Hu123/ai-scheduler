@@ -1,6 +1,4 @@
-# ai-scheduler
-
-定时自动调用 `claude` / `codex` 命令行工具提问的 CLI 工具。
+# 定时自动调用 claude / codex 命令行工具提问的 CLI 工具。
 
 到点自动拉起 AI CLI、把回答落盘、终端用 rich 美化输出。一个用来**定时召唤 AI 的闹钟**——调度逻辑是纯代码，AI 只是被调度的对象。
 
